@@ -99,6 +99,7 @@ uuid=$(blkid -c/dev/null -ovalue -sUUID "$part")
 
 target=$(mktemp -d)
 mount "$part" "$target"
+tar -C "$target" --numeric-owner -xf "$QIMG_ROOTFS"
 
 test -n "$http_proxy" &&
   echo "Acquire::http::Proxy \"${http_proxy}\";" >  "${target}/etc/apt/apt.conf.d/proxy"
