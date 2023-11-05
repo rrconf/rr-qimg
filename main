@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -Eueo pipefail
+#
+# require qimg [ </path/to/rootf.tgz> [ /path/to/image.qcow2 ] ]
+#
+# shellcheck disable=SC1090
+source "${RRCONFINC}"
+
+if (( RRUID != 0 )); then
+  fail run as root
+fi
+
+export http_proxy="${http_proxy:=http://192.168.88.64:3128}"
+export https_proxy="${https_proxy:=$http_proxy}"
+export LC_ALL=C
+
+QIMG_ROOTFS="${QIMG_ROOTFS:=}"
+QIMG_IMAGE="${QIMG_IMAGE:=}"
+
+if (( $# >= 1 )); then
+  QIMG_ROOTFS="$1"; shift
+  if (( $# >= 1 )); then
+    QIMG_IMAGE="$1"; shift
+  fi
+fi
+
+test -n "$QIMG_ROOTFS" ||
+  fail rootfs must be in QIMG_ROOTFS or the first argument
+QIMG_ROOTFS="$(realpath -e "$QIMG_ROOTFS")" ||
+  fail "QIMG_ROOTFS ($QIMG_ROOTFS) must exist"
+
+test -z "$QIMG_IMAGE" || {
+  QIMG_IMAGE="${QIMG_ROOTFS%%.tgz}.qcow2"
+}
+
+
+nbd=
+target=
+
+# umount and disconnect on failures
+cleanup() {
+  safeUmountAll
+  test -n "$nbd" &&
+    qemu-nbd --disconnect "$nbd"
+  rm -rf "$QIMG_IMAGE"
+}
+trap cleanup 0 1 2 3 6 15
+
+# find first free nbd device (similar to zramctl --find):
+nbdfind() {
+  local dev=
+  for n in $(seq 0 99); do
+    dev="/dev/nbd$n"
+    nbd-client -check "$dev" &>/dev/null &&
+      continue
+    echo "$dev"
+    return 0
+  done
+  return 1
+}
+
+safeUmount() {
+  mountpoint -q "$1" && umount "$1"
+  return 0
+}
+
+# umount target volumes
+safeUmountAll() {
+  test -z "$target" && return 0
+  safeUmount "$target/proc"
+  safeUmount "$target/dev/pts"
+  safeUmount "$target/dev/shm"
+  safeUmount "$target/dev"
+  safeUmount "$target/run/lock"
+  safeUmount "$target/run"
+  safeUmount "$target/sys"
+  safeUmount "$target"
+  rm -rf "$target"
+  return 0
+}
+
+rm -rf "${QIMG_IMAGE}"
+qemu-img create -f qcow2 -o cluster_size=256k "${QIMG_IMAGE}" 4G
+
+nbd=$(nbdfind)
+qemu-nbd --connect="$nbd" "$QIMG_IMAGE"
+
+sfdisk "$nbd" << EOF
+label: dos
+start=2048, type=83, bootable
+EOF
+sfdisk -d "$nbd"
+
+part="${nbd}p1"
+udevadm settle --timeout=5 --exit-if-exists="$part"
+
+/sbin/mkfs -t ext4 -I 512 -O '^large_dir' -O '^metadata_csum_seed' "$part"
+uuid=$(blkid -c/dev/null -ovalue -sUUID "$part")
+
+target=$(mktemp -d)
+mount "$part" "$target"
+
+test -n "$http_proxy" &&
+  echo "Acquire::http::Proxy \"${http_proxy}\";" >  "${target}/etc/apt/apt.conf.d/proxy"
+
+mount none "$target/proc" -t proc
+mount /dev "$target/dev" --bind
+mount none "$target/dev/pts" -t devpts
+mount none "$target/dev/shm" -t tmpfs
+mount none "$target/run" -t tmpfs
+mkdir "$target/run/lock"
+mount none "$target/run/lock" -t tmpfs
+mount none "$target/sys" -t sysfs
+
+chroot "$target" apt-get update
+echo root:root | chpasswd --root "${target}"
+printf 'pts/0\npts/1\n' >> "${target}/etc/securetty"
+chroot "${target}" systemctl enable systemd-networkd
+echo "UUID=\"$uuid\" / ext4 errors=remount-ro,noatime,nodiratime,nobarrier 0 1" > "${target}/etc/fstab"
+
+chroot "${target}" apt-get update
+chroot "${target}" apt-get -y install linux-image-amd64
+chroot "${target}" apt-get -y --no-show-progress install grub-pc
+chroot "${target}" grub-mkconfig -o /boot/grub/grub.cfg
+#chroot "${target}" grub-install --help
+chroot "${target}" grub-install --target=i386-pc --no-nvram --force-extra-removable --no-floppy --modules=part_msdos --grub-mkdevicemap=/boot/grub/device.map "$nbd"
+
+safeUmountAll
+qemu-nbd --disconnect "$nbd"
+trap - EXIT
