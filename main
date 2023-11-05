@@ -29,7 +29,7 @@ test -n "$QIMG_ROOTFS" ||
 QIMG_ROOTFS="$(realpath -e "$QIMG_ROOTFS")" ||
   fail "QIMG_ROOTFS ($QIMG_ROOTFS) must exist"
 
-test -z "$QIMG_IMAGE" || {
+test -z "$QIMG_IMAGE" && {
   QIMG_IMAGE="${QIMG_ROOTFS%%.tgz}.qcow2"
 }
 
