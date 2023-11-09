@@ -14,6 +14,7 @@ export http_proxy="${http_proxy:=http://192.168.88.64:3128}"
 export https_proxy="${https_proxy:=$http_proxy}"
 export LC_ALL=C
 
+QIMG_BUILD_DIR="${QIMG_BUILD_DIR:=$HOME}"
 QIMG_ROOTFS="${QIMG_ROOTFS:=}"
 QIMG_IMAGE="${QIMG_IMAGE:=}"
 
@@ -97,7 +98,7 @@ udevadm settle --timeout=5 --exit-if-exists="$part"
 /sbin/mkfs -t ext4 -I 512 -O '^large_dir' -O '^metadata_csum_seed' "$part"
 uuid=$(blkid -c/dev/null -ovalue -sUUID "$part")
 
-target=$(mktemp -d)
+target="$(mktemp -d "$QIMG_BUILD_DIR/qimg.XXXX")"
 mount "$part" "$target"
 tar -C "$target" --numeric-owner -xf "$QIMG_ROOTFS"
 

@@ -7,6 +7,7 @@ Build `qcow2` image with grub installed from provided root-fs (e.g. from [dbs](h
 ```sh
 export QIMG_ROOTFS=/path/to/root-fs.tgz
 export QIMG_IMAGE=/path/to/image.qcow2
+export QIMG_BUILD_DIR="$HOME"
 
 require qimg [ /path/to/root-fs.tgz [ /path/to/image.qcow2 ] ]
 ```
