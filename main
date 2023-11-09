@@ -100,12 +100,9 @@ uuid=$(blkid -c/dev/null -ovalue -sUUID "$part")
 
 target="$(mktemp -d "$QIMG_BUILD_DIR/qimg.XXXX")"
 mount "$part" "$target"
-stat "$target"
-chmod 755 "$target"
 tar -C "$target" --numeric-owner -xf "$QIMG_ROOTFS"
-stat "$target"
+# this should be done by dbs module
 chmod 755 "$target"
-stat "$target"
 
 test -n "$http_proxy" &&
   echo "Acquire::http::Proxy \"${http_proxy}\";" >  "${target}/etc/apt/apt.conf.d/proxy"
