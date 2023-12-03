@@ -130,5 +130,7 @@ chroot "${target}" grub-mkconfig -o /boot/grub/grub.cfg
 chroot "${target}" grub-install --target=i386-pc --no-nvram --force-extra-removable --no-floppy --modules=part_msdos --grub-mkdevicemap=/boot/grub/device.map "$nbd"
 
 safeUmountAll
+# something above changes to netdev since there is different group file...
+chgrp kvm /dev/kvm
 qemu-nbd --disconnect "$nbd"
 trap - EXIT
