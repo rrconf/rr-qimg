@@ -47,6 +47,10 @@ cleanup() {
 }
 trap cleanup 0 1 2 3 6 15
 
+# just in case...
+test -d /sys/module/nbd ||
+  modprobe nbd
+
 # find first free nbd device (similar to zramctl --find):
 nbdfind() {
   local dev=
