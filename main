@@ -10,8 +10,6 @@ if (( RRUID != 0 )); then
   fail run as root
 fi
 
-export http_proxy="${http_proxy:=http://192.168.88.64:3128}"
-export https_proxy="${https_proxy:=$http_proxy}"
 export LC_ALL=C
 
 QIMG_BUILD_DIR="${QIMG_BUILD_DIR:=$HOME}"
@@ -108,8 +106,9 @@ tar -C "$target" --numeric-owner -xf "$QIMG_ROOTFS"
 # this should be done by dbs module
 chmod 755 "$target"
 
+# shellcheck disable=SC2154
 test -n "$http_proxy" &&
-  echo "Acquire::http::Proxy \"${http_proxy}\";" >  "${target}/etc/apt/apt.conf.d/proxy"
+  echo "Acquire::http::Proxy \"$http_proxy\";" >  "$target/etc/apt/apt.conf.d/proxy"
 
 mount none "$target/proc" -t proc
 mount /dev "$target/dev" --bind
